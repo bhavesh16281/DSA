@@ -344,17 +344,150 @@ All complexity boils down to **a few repeating patterns**. Learn the patterns, n
 | Inside each other (nested) | **Multiply** | O(n) × O(n) → O(n²) |
 | Normal loop with log loop inside | **Multiply** | O(n) × O(log n) → O(n log n) |
 
-### 7.3 Recursion patterns
-Ask 2 questions: **(1) how many calls per call? (2) how much does the input shrink?**
+### 7.3 Recursion patterns (step-by-step)
 
-| Pattern | Calls | Input shrinks | Complexity | Example |
-|---|---|---|---|---|
-| A | 1 | −1 | O(n) | factorial, countdown |
-| B | 1 | ÷2 | O(log n) | recursive binary search |
-| C | 2 | −1 | O(2ⁿ) | naive Fibonacci |
-| D | 2 | ÷2 + O(n) merge | O(n log n) | merge sort |
-| E | n choices, shrinking | −1 | O(n!) | permutations |
+#### The one formula you need
 
+```
+Time = (how many calls happen in total)  ×  (work done inside each call)
+```
+
+So for any recursive function, answer **3 questions**:
+
+| # | Question | Where to look in the code |
+|---|---|---|
+| 1 | How many times does it call **itself** per call? | Count the recursive calls in the body |
+| 2 | How does the input **shrink**? `n-1` (slowly) or `n/2` (fast)? | The argument passed to the call |
+| 3 | How much **extra work** is done in one call (loop, merge, print)? | Everything except the recursive calls |
+
+#### Picture it as a tree
+Each call is a box. Its recursive calls are its children. Then:
+- **Height** of tree = how many times you can shrink until you hit the base case.
+- **Width** = how many boxes per level (1 call → width 1, 2 calls → width doubles each level).
+- **Total** = (all boxes) × (work in each box).
+
+```mermaid
+flowchart TD
+    Q1{"How many recursive calls<br/>in the body?"}
+    Q1 -->|"1 call"| Q2{"How does n shrink?"}
+    Q1 -->|"2 calls"| Q3{"How does n shrink?"}
+    Q1 -->|"loop making n calls"| E["O(n!)<br/>every order"]
+    Q2 -->|"n-1"| A["O(n)<br/>a chain"]
+    Q2 -->|"n/2"| B["O(log n)<br/>halving chain"]
+    Q3 -->|"n-1"| C["O(2ⁿ)<br/>tree doubles each level"]
+    Q3 -->|"n/2"| Q4{"Extra work per call?"}
+    Q4 -->|"O(1)"| D1["O(n)"]
+    Q4 -->|"O(n)"| D2["O(n log n)<br/>merge sort"]
+```
+
+---
+
+#### Pattern A — 1 call, shrink by 1 → O(n)
+**Shape: a straight chain.** n boxes, 1 step each.
+
+```java
+void countDown(int n) {
+    if (n == 0) return;          // base case
+    System.out.println(n);       // O(1) work
+    countDown(n - 1);            // 1 call, n-1
+}
+```
+`countDown(3)` → `countDown(2)` → `countDown(1)` → `countDown(0)`: **n + 1 calls × 1 step = O(n)**.
+Same for factorial, sum of 1..n.
+
+#### Pattern B — 1 call, cut in half → O(log n)
+**Shape: a short chain.** Halving means the chain is only log n long.
+
+```java
+void halve(int n) {
+    if (n == 0) return;
+    halve(n / 2);                // 1 call, n/2
+}
+```
+`halve(8)` → `halve(4)` → `halve(2)` → `halve(1)` → `halve(0)`: about **log n calls × 1 step = O(log n)**.
+Same for recursive binary search.
+
+#### Pattern C — 2 calls, shrink by 1 → O(2ⁿ)
+**Shape: a tree that doubles every level.** Level 0 has 1 box, level 1 has 2, level 2 has 4, ... level n has 2ⁿ.
+
+```java
+int fib(int n) {
+    if (n <= 1) return n;
+    return fib(n - 1) + fib(n - 2);   // 2 calls, each shrinks by about 1
+}
+```
+Boxes: 1 + 2 + 4 + 8 + ... ≈ **2ⁿ**, each doing O(1) work → **O(2ⁿ)**.
+(Strictly it is ~1.6ⁿ, but we say O(2ⁿ) in interviews.)
+
+#### Pattern D — 2 calls, cut in half, plus O(n) work → O(n log n)
+**Shape: a balanced tree, log n levels tall, every level does about n work in total.**
+
+```java
+void mergeSort(int[] a, int l, int r) {
+    if (l >= r) return;
+    int mid = (l + r) / 2;
+    mergeSort(a, l, mid);        // call 1, half
+    mergeSort(a, mid + 1, r);    // call 2, half
+    merge(a, l, mid, r);         // O(n) work in this call
+}
+```
+
+| Level | Boxes | Size of each | Work per level |
+|---|---|---|---|
+| 0 | 1 | n | n |
+| 1 | 2 | n/2 | n |
+| 2 | 4 | n/4 | n |
+| ... | ... | ... | n |
+| log n | n | 1 | n |
+
+**n work per level × log n levels = O(n log n)**.
+
+> Same shape but only **O(1)** work per call (for example, sum of an array by splitting it in half, or visiting every node of a tree): the work per level is 1, 2, 4, ..., n → total **O(n)**.
+
+#### Pattern E — loop that makes calls, choices shrink by 1 → O(n!)
+**Shape: n choices, then n-1, then n-2, ...**
+
+```java
+void permute(int[] a, int idx) {
+    if (idx == a.length) { print(a); return; }
+    for (int i = idx; i < a.length; i++) {   // n, then n-1, then n-2 ... choices
+        swap(a, idx, i);
+        permute(a, idx + 1);
+        swap(a, idx, i);
+    }
+}
+```
+n × (n-1) × (n-2) × ... × 1 = **n!** arrangements.
+
+---
+
+#### Bonus patterns that trip people up
+
+| Code shape | Complexity | Why |
+|---|---|---|
+| 1 call, n-1, **plus an O(n) loop** inside each call | O(n²) | n calls × n work (n + (n-1) + ... = n²/2) |
+| 1 call, n/2, **plus an O(n) loop** inside | O(n) | n + n/2 + n/4 + ... ≈ 2n |
+| 2 calls, n-1, **with memoization** (each value computed once) | O(n) | only n distinct boxes, repeats are looked up |
+| Recursion with a loop of k choices, depth d (backtracking) | O(kᵈ) | k branches per level, d levels |
+
+#### Cheat sheet: recognise it in 5 seconds
+
+| You see in the code | Complexity |
+|---|---|
+| `f(n-1)` once | O(n) |
+| `f(n/2)` once | O(log n) |
+| `f(n-1) + f(n-2)` (two calls, minus 1) | O(2ⁿ) |
+| `f(left)` and `f(right)` + loop/merge over n | O(n log n) |
+| `f(left)` and `f(right)` + nothing extra | O(n) |
+| `for` loop with `f(i+1)` inside, picking from what is left | O(n!) |
+
+#### Space complexity of recursion
+Each pending call sits on the **call stack**. Space = **depth of recursion** (the height of the tree, not the number of boxes).
+- Chain `f(n-1)` → depth n → O(n) space.
+- Halving `f(n/2)` → depth log n → O(log n) space.
+- Fibonacci tree → depth n → O(n) space (even though time is O(2ⁿ)).
+
+> **Remember:** Time = total calls × work per call. Count the calls per call (1, 2, or a loop), look at how fast `n` shrinks (−1 is slow, ÷2 is fast), then add the extra work per call.
 ### 7.4 Data-structure patterns
 
 | Idea | Complexity |

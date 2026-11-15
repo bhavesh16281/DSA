@@ -229,64 +229,97 @@ Green = fast, yellow/orange = careful, red = tiny `n` only.
 
 ## 6. Each Complexity Explained
 
-### 6.1 O(1) — Constant
-Work does **not** depend on `n`. Same effort for 10 or 10 million items.
+**Just one idea:** `n` = how many items you have. Complexity = **how many steps you need**.
 
-- Analogy: Opening a book to a known page number.
-- Examples: `arr[5]`, `map.get(key)`, `stack.push()`, swapping two variables, `n % 2`.
+Imagine **n = 8 names in a list**. How many steps do different jobs take?
 
-### 6.2 O(log n) — Logarithmic
-Each step **cuts the problem by a fraction (usually half)**. Super fast.
+| Complexity | Plain meaning | Steps for n = 8 | Steps for n = 1000 |
+|---|---|---|---|
+| O(1) | Always 1 step | 1 | 1 |
+| O(log n) | Halve until done | 3 | 10 |
+| O(n) | Visit each item once | 8 | 1,000 |
+| O(n log n) | Visit each item, plus halving | 24 | 10,000 |
+| O(n²) | Each item meets every item | 64 | 1,000,000 |
+| O(2ⁿ) | Double for each item | 256 | impossible |
+| O(n!) | Every order | 40,320 | impossible |
 
-- Analogy: Guess a number between 1 and 1000: "Is it above 500?" → 10 questions max.
-- `log₂(1,000,000) ≈ 20`. A million items need only ~20 steps.
-- Examples: binary search, loops that do `i *= 2` / `i /= 2`, balanced BST search.
+Now one tiny example each. Read only the **bold line**; the rest is optional.
 
-### 6.3 O(√n) — Square root
-Loop runs only until `i * i <= n`.
+---
 
-- Analogy: To check whether 100 is prime, you only test divisors up to 10.
-- Why: divisors come in pairs (`a × b = n`), so one of them is always ≤ √n.
-- Examples: prime check, finding all divisors of `n`.
+### 6.1 O(1) — Constant ("instant")
+**The work does not grow when items grow.**
 
-### 6.4 O(n) — Linear
-Touch every element **once**.
+```java
+int first = arr[0];   // 1 step, even if arr has a million items
+```
+Like: opening a book directly at page 5.
 
-- Analogy: Reading every page of a book once.
-- Examples: sum of array, find max, linear search, traversing a linked list.
+### 6.2 O(log n) — Logarithmic ("halving")
+**Each step throws away half of the items.**
 
-### 6.5 O(n log n) — Linearithmic
-Do an O(log n) job **for each of n items**, or split in half repeatedly and do O(n) work at every level.
+```java
+for (int i = n; i > 1; i = i / 2) { }   // 8 → 4 → 2 → 1 = 3 steps
+```
+Like: guessing a number from 1–1000. "Higher than 500?" kills half each time → about 10 questions.
 
-- Analogy: Sorting a deck by repeatedly splitting it in half, then merging.
-- Examples: merge sort, heap sort, quick sort (average), sorting then scanning.
-- This is the **best possible for comparison-based sorting**.
+### 6.3 O(n) — Linear ("one pass")
+**Look at each item exactly once.**
 
-### 6.6 O(n²) — Quadratic
-For each element, you look at **every other element**. Nested loops.
+```java
+for (int i = 0; i < n; i++) { }   // 8 items = 8 steps
+```
+Like: reading every page of a book once.
 
-- Analogy: Everyone in a room shakes hands with everyone else.
-- Examples: bubble / selection / insertion sort, comparing all pairs, printing a 2D grid.
+### 6.4 O(n log n) — ("one pass, with halving inside")
+**A loop (n) that contains a halving loop (log n).** Multiply: n × log n.
 
-### 6.7 O(n³) — Cubic
-Three nested loops over `n`.
+```java
+for (int i = 0; i < n; i++)
+    for (int j = n; j > 1; j = j / 2) { }   // 8 × 3 = 24 steps
+```
+Where you meet it: **sorting** (`Arrays.sort`, merge sort).
 
-- Examples: naive matrix multiplication, Floyd–Warshall (all-pairs shortest path).
+### 6.5 O(n²) — Quadratic ("loop inside a loop")
+**For every item, loop over all items again.**
 
-### 6.8 O(2ⁿ) — Exponential
-Work **doubles with every extra element**. Each element has 2 choices (take / skip).
+```java
+for (int i = 0; i < n; i++)
+    for (int j = 0; j < n; j++) { }   // 8 × 8 = 64 steps
+```
+Like: 8 people, each shakes hands with all 8.
 
-- Analogy: Every new item doubles the number of possible outfits.
-- Examples: all subsets, naive recursive Fibonacci, brute-force on choices.
-- Usable only for `n ≤ ~20-25`.
+### 6.6 O(2ⁿ) — Exponential ("take or skip")
+**Every extra item doubles the work.**
 
-### 6.9 O(n!) — Factorial
-Try **every possible ordering**. Grows insanely fast: `10! = 3.6 million`, `20! = 2.4 × 10¹⁸`.
+Each item: take it or skip it. 3 items → 2 × 2 × 2 = 8 combinations. 20 items → about 1 million.
+Where you meet it: all subsets, naive Fibonacci. Only safe for tiny n (≤ ~20).
 
-- Examples: all permutations, brute-force Travelling Salesman.
-- Usable only for `n ≤ ~10`.
+### 6.7 O(n!) — Factorial ("every order")
+**Try every possible arrangement.**
 
-> **Remember:** halving → log; once through → n; pair up → n²; choose/skip → 2ⁿ; order → n!.
+3 items → 3 × 2 × 1 = 6 orders. 10 items → 3,628,800 orders.
+Where you meet it: all permutations. Only safe for tiny n (≤ ~10).
+
+### Two rare ones (just recognise them)
+- **O(√n):** loop stops at `i * i <= n` (prime check). Faster than n, slower than log n.
+- **O(n³):** three loops inside each other. Like n², but one more loop.
+
+---
+
+### Memory trick: count the loops
+```
+no loop                → O(1)
+loop that halves       → O(log n)
+one normal loop        → O(n)
+loop + halving loop    → O(n log n)
+two loops inside       → O(n²)
+three loops inside     → O(n³)
+take or skip           → O(2ⁿ)
+every order            → O(n!)
+```
+
+> **Remember:** Fewer/faster loops = faster code. Most problems: aim for O(n) or O(n log n).
 
 ---
 

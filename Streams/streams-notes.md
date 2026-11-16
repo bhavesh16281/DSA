@@ -1108,6 +1108,169 @@ flowchart TD
 
 ---
 
+## Collectors explained line by line (the "why" so you can remember)
+
+**Big idea:** `collect(...)` = "stream, put everything into a box". The Collector is the **type of box**.
+Think of a school: students (stream) -> principal says "put them in a **list**" / "make **groups by class**" / "**count** them".
+
+Data used below:
+```
+nums  = [5, 3, 8, 1, 9, 3, 6]
+names = [john, alice, bob, alice, charlie]
+emps  = John(IT,50k,30) Alice(HR,60k,28) Bob(IT,70k,35) Carol(HR,45k,40) Dave(OPS,80k,45)
+```
+
+### 1. `toList()` - "put in a line, keep everything"
+`nums.stream().collect(Collectors.toList());`  ->  `[5, 3, 8, 1, 9, 3, 6]`
+Duplicates stay, order stays. Use: default box.
+
+### 2. `toSet()` - "put in a bag, no duplicates"
+`nums.stream().collect(Collectors.toSet());`  ->  `{1, 3, 5, 6, 8, 9}` (3 appears once, order NOT guaranteed)
+Use: "unique values".
+
+### 3. `toMap(keyFn, valueFn)` - "make a dictionary / phone book"
+`emps.stream().collect(Collectors.toMap(Emp::id, Emp::name));`
+Read it as: **"for each emp: key = emp.id, value = emp.name"**
+```
+1 -> John, 2 -> Alice, 3 -> Bob, 4 -> Carol, 5 -> Dave
+```
+Two lambdas: 1st = what goes on the **label (key)**, 2nd = what goes **inside (value)**.
+Problem: if two items give the SAME key -> **crash** (`IllegalStateException: Duplicate key`).
+
+### 4. `toMap(keyFn, valueFn, mergeFn)` - "dictionary + what to do when key repeats"
+`names.stream().collect(Collectors.toMap(n -> n, n -> 1, Integer::sum));`
+- key = the word itself (`n -> n`)
+- value = 1 (each occurrence counts as 1)
+- merge = if key already exists, **add old + new** (`Integer::sum`, same as `(old, nw) -> old + nw`)
+
+Trace:
+```
+john    -> new key        {john=1}
+alice   -> new key        {john=1, alice=1}
+bob     -> new key        {john=1, alice=1, bob=1}
+alice   -> EXISTS! merge(1,1)=2   {john=1, alice=2, bob=1}
+charlie -> new key        {..., charlie=1}
+```
+Result: `{john=1, alice=2, bob=1, charlie=1}` = **word count**.
+Memory: *"merge function = tie-breaker when two items fight for the same key"*. Other merges: `(a,b) -> a` keep first, `(a,b) -> b` keep last.
+
+### 5. `joining(delimiter, prefix, suffix)` - "glue strings together"
+`names.stream().collect(Collectors.joining(", ", "[", "]"));`
+```
+Collectors.joining( ", "  ,  "["  ,  "]" )
+                     ^glue    ^start  ^end
+```
+Result: `[john, alice, bob, alice, charlie]`
+Variants: `joining()` -> `johnalicebob...`, `joining(", ")` -> `john, alice, bob...`.
+Same as `String.join` but works on streams (after filter/map).
+
+### 6. `counting()` - "how many"
+`nums.stream().collect(Collectors.counting());` -> `7` (type `Long`)
+Alone, `nums.stream().count()` is shorter. Real use: **inside groupingBy** (see 10).
+
+### 7. `summingDouble(fn)` - "add up this field"
+`emps.stream().collect(Collectors.summingDouble(Emp::salary));` -> 50000+60000+70000+45000+80000 = `305000.0`
+`fn` says WHICH number to add. Variants: `summingInt`, `summingLong`.
+
+### 8. `averagingDouble(fn)` - "average of this field"
+`emps.stream().collect(Collectors.averagingDouble(Emp::salary));` -> `305000 / 5 = 61000.0`
+Variants: `averagingInt`, `averagingLong`.
+(counting, summing, averaging = SQL COUNT, SUM, AVG.)
+
+### 9. `groupingBy(classifier)` - "make piles by this label"  (SQL GROUP BY)
+`emps.stream().collect(Collectors.groupingBy(Emp::dept));`
+Read: **"put each emp in the pile named emp.dept"**
+```
+IT  -> [John, Bob]
+HR  -> [Alice, Carol]
+OPS -> [Dave]
+```
+Type: `Map<String, List<Emp>>`  (key = pile label, value = list of items in that pile).
+
+### 10. `groupingBy(classifier, downstream)` - "make piles, then do something to each pile"
+`emps.stream().collect(Collectors.groupingBy(Emp::dept, Collectors.counting()));`
+Step 1: make piles (as above). Step 2: apply **counting()** to each pile:
+```
+IT -> 2, HR -> 2, OPS -> 1
+```
+The 2nd argument is the **"what to do with each pile"** (downstream). Without it default is `toList()`.
+Swap the downstream to change the answer:
+| 2nd argument | Pile becomes |
+|---|---|
+| `counting()` | number of items |
+| `summingDouble(Emp::salary)` | total salary |
+| `averagingDouble(Emp::salary)` | average salary |
+| `mapping(Emp::name, toList())` | list of names |
+| `maxBy(...)` | best item (Optional) |
+
+### 11. `mapping(fn, downstream)` - "inside the pile, keep only this field"
+`emps.stream().collect(groupingBy(Emp::dept, mapping(Emp::name, toList())));`
+Without mapping pile = whole Emp objects. With it: **convert each item first (map), then collect (toList)**.
+```
+IT -> [John, Bob], HR -> [Alice, Carol], OPS -> [Dave]
+```
+Memory: `mapping` = the `map()` of collectors. It exists because you can't write `.map()` inside a group.
+
+### 12. `partitioningBy(predicate)` - "two piles only: YES and NO"
+`emps.stream().collect(Collectors.partitioningBy(e -> e.salary() > 55000));`
+```
+true  -> [Alice, Bob, Dave]      (salary > 55000)
+false -> [John, Carol]
+```
+Type `Map<Boolean, List<Emp>>`. Both keys ALWAYS present (even if empty).
+**groupingBy vs partitioningBy:** groupingBy = many piles by label; partitioningBy = exactly 2 piles by a true/false question.
+
+### 13. `groupingBy(..., maxBy(comparator))` - "best item in each pile"
+`emps.stream().collect(groupingBy(Emp::dept, maxBy(Comparator.comparing(Emp::salary))));`
+```
+IT  -> Optional[Bob 70k]
+HR  -> Optional[Alice 60k]
+OPS -> Optional[Dave 80k]
+```
+Values are **Optional** because a pile could be empty in theory. To get plain names wrap with `collectingAndThen`:
+```java
+groupingBy(Emp::dept,
+    collectingAndThen(maxBy(Comparator.comparing(Emp::salary)), opt -> opt.get().name()))
+// IT -> Bob, HR -> Alice, OPS -> Dave
+```
+`collectingAndThen(collector, finalStep)` = "collect like this, THEN apply this last step".
+
+### 14. `toCollection(Supplier)` - "I choose the box type"
+`names.stream().collect(Collectors.toCollection(TreeSet::new));`
+`TreeSet::new` = "give me an empty TreeSet to fill" (a **Supplier**, method ref type 4).
+Use when `toList/toSet` isn't enough: `TreeSet` (sorted), `LinkedList`, `ArrayDeque`, `LinkedHashSet` (keeps order).
+(`TreeSet<Emp>` would need Emp to be Comparable or a comparator: `() -> new TreeSet<>(Comparator.comparing(Emp::name))`.)
+
+### One-glance memory table
+| I want... | Use | Think |
+|---|---|---|
+| all items | `toList()` | line |
+| unique items | `toSet()` | bag |
+| lookup table | `toMap(key, value[, merge])` | phone book |
+| one text | `joining(sep, pre, suf)` | glue |
+| how many / total / avg | `counting / summingX / averagingX` | SQL COUNT/SUM/AVG |
+| piles by label | `groupingBy(label[, whatToDoPerPile])` | GROUP BY |
+| 2 piles yes/no | `partitioningBy(question)` | yes/no |
+| pick field inside pile | `mapping(field, toList())` | map in group |
+| best in pile | `maxBy/minBy` (+ `collectingAndThen` to unwrap) | top of each pile |
+| special box | `toCollection(TreeSet::new)` | choose container |
+
+### The only 3 patterns you need 90% of the time
+```java
+// 1. "X per Y"  ->  groupingBy(Y, aggregate X)
+groupingBy(Emp::dept, counting())                       // employees per dept
+groupingBy(Emp::dept, summingDouble(Emp::salary))       // salary per dept
+
+// 2. "frequency / count of each"  ->  groupingBy(self, counting())
+names.stream().collect(groupingBy(n -> n, counting()))  // {john=1, alice=2, ...}
+
+// 3. "lookup by id"  ->  toMap(id, object)
+emps.stream().collect(toMap(Emp::id, e -> e))
+```
+Sentence trick: **"Y-wise"/"per Y"/"each Y" -> groupingBy(Y). Then ask: "what do I want from each group?" -> that's the 2nd argument.**
+
+---
+
 # 12. COMPARATOR (all of them, with where to use)
 
 A Comparator answers: **"which of these two comes first?"** `compare(a, b)` returns
